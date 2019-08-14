@@ -79,3 +79,49 @@ class GMM(object):
                 print("Singular matrix: components collapsed")
                 return -1
         return 0
+
+    def _E_step(self):
+        for i in range(self.N):
+            x_i = self.X[i, :]
+
+            denom_vals = []
+            for c in range(self.C):
+                pi_c = self.pi[c]
+                mu_c = self.mu[c, :]
+                sigma_c = self.sigma[c, :, :]
+
+                log_pi_c = np.log(pi_c)
+                log_p_x_i = log_gaussian_pdf(x_i, mu_c, sigma_c)
+
+                # log N(X_i | mu_c, Sigma_c) + log pi_c
+                denom_vals.append(log_p_x_i + log_pi_c)
+
+            # log \sum_c exp{ log N(X_i | mu_c, Sigma_c) + log pi_c}  ]
+            log_denom = logsumexp(denom_vals)
+            q_i = np.exp([num - log_denom for num in denom_vals])
+            assert_allclose(np.sum(q_i), 1, err_msg="{}".format(np.sum(q_i)))
+
+            self.Q[i, :] q_i
+
+    def _M_step(self):
+        C, N, X = self.C, self.N, self.X
+        denoms = np.sum(self.Q, axis=0)
+
+        # update cluster priors
+        self.pi = denoms / N
+
+        #update cluster means
+        nums_mu = [np.dot(self.Q[:, c], X) for c in range(C)]
+        for ix, (num, den) in enumerate(zip(nums_mu, denoms)):
+            self.mu[ix, :] = num / den
+
+        # update cluster covariances
+        for c in range(C):
+            mu_c = self.mu[c, :]
+            n_c = denoms[c]
+
+            outer = np.zeros((2, 2))
+            for i in range(N):
+                wic = self.Q[i, c]
+                xi = self.X[i, :]
+                outer += wic * np.outer
