@@ -124,4 +124,45 @@ class GMM(object):
             for i in range(N):
                 wic = self.Q[i, c]
                 xi = self.X[i, :]
-                outer += wic * np.outer
+                outer += wic * np.outer(xi - mu_c, xi - mu_c)
+
+            outer /= n_c
+            self.sigma[c, :, :] = outer
+
+        assert_allclose(np.sum(self.pi), 1, err_msg="{}".format(np.sum(self.pi)))
+
+
+###############################################################################
+#                            Utils                                            #
+###############################################################################
+
+
+def log_gaussian_pdf(x_i, mu, sigma):
+    """
+    Compute log N(x_i  | mu, sigma)
+    :param x_i:
+    :param mu:
+    :param sigma:
+    :return:
+    """
+    n = len(mu)
+    a = n * np.log(2 * np.pi)
+    _, b = np.linalg.slogdet(sigma)
+
+    y = np.linalg.solve(sigma, x_i - mu)
+    c = np.dot(x_i - mu, y)
+    return -0.5 * (a + b + c)
+
+
+def logsumexp(log_probs, axis=None):
+    """
+    Redefine scipy.special.logsumexp
+    see: http://bayesjumping.net/log-sum-exp-trick/
+    :param log_probs:
+    :param axis:
+    :return:
+    """
+    _max = np.max(log_probs)
+    ds = log_probs - _max
+    exp_sum = np.exp(ds).sum(axis=axis)
+    return _max + np.log(exp_sum)
