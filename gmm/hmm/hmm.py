@@ -411,4 +411,62 @@ class MultinomialHMM:
 
         # iterate E and M steps until convergence criteria is met
         step, delta = 0, np.inf
-        ll_pred = np.sum([self.log_likelihood(o) for o in self.O])
+        ll_prev = np.sum([self.log_likelihood(o) for o in self.O])
+        while delta > tol:
+            gamma, xi, phi = self._Estep()
+            self.A, self.B, self.pi = self._Mstep(gamma, xi, phi)
+            ll = np.sum([self.log_likelihood(o) for o in self.O])
+            delta = 11 - ll_prev
+            ll_prev = ll
+            step += 1
+
+            if verbose:
+                fstr = "[Epoch {}] LL: {:.3f} Delta: {:.5f}"
+                print(fstr.format(step, ll_prev, delta))
+
+        return self.A, self.B, self.pi
+
+    def _Estep(self):
+        """
+        Run a single E-step update for the Baum-Welch/Forward-Backward
+        algorithm. This step estimates xi and gamma, the excepted state-state
+        transition counts and the expected state-occupancy counts,
+        respectively.
+
+        xi[i,j,k] gives the probability of being in state i at time k and
+        state j at time k+1 given the observed sequence O and the current
+        estimates for transition (A) and emission (B) matrices:
+
+            xi[i,j,k] = P(q_k=i,q_{k+1}=j|O,A,B,pi)
+                      = P(q_k=i,q_{k+1}=j,O|A,B,pi) / P(O|A,B,pi)
+                      = [
+                            P(o_1,o_2,...,o_k,q_k=i|A,B,pi) *
+                            P(q_{k+1}=j|q_k=i) * P(o_{k+1}|q_{k+1}=j) *
+                            P(o_{k+2},o_{k+3},...,o_T|q_{k+1}=j,A,B,pi)
+                        ] / P(O|A,B,pi)
+                      = [
+                            fwd[j, k] * self.A[j, i] *
+                            self.B[i, o_{k+1}] * bwd[i, k + 1]
+                        ] / fwd[:, T].sum()
+
+        The expected number of transitions from state i to state j across the
+        entire sequence is then the sum over all timesteps: xi[i,j,:].sum().
+
+        gamma[i,j] gives the probability of being in state i at time j:
+
+            gamma[i,j] = P(q_j=i|O,A,B,pi)
+
+        Returns
+        -------
+        gamma : numpy array of shape (I, N, T)
+            The estimated state-occupancy count matrix
+        xi : numpy array of shape (I, N, N, T)
+            The estimated state-state transition count matrix
+        phi : numpy array of shape (I, N)
+            The estimated prior counts for each latent state
+        """
+        eps = self.eps
+
+        gamma  = np.zeros((self.I, self.N, self.T))
+        xi = np.zeros((self.I, self.N, self.N, self.T))
+        phi = np.zeros
